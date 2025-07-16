@@ -271,7 +271,7 @@ class RadioApp {
         grid.innerHTML = this.stations.map(station => this.createStationCard(station)).join('');
 
         // Add click listeners to play buttons
-        grid.querySelectorAll('.play-button').forEach((btn, index) => {
+        grid.querySelectorAll('.play-btn').forEach((btn, index) => {
             btn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 this.playStation(this.stations[index]);
@@ -284,6 +284,9 @@ class RadioApp {
                 this.playStation(this.stations[index]);
             });
         });
+
+        // Update favorite buttons
+        this.updateFavoriteIcons();
     }
 
     createStationCard(station) {
@@ -294,7 +297,7 @@ class RadioApp {
         const isFav = this.isFavorite(station);
         
         return `
-            <div class="station-card">
+            <div class="station-card" data-station-uuid="${station.stationuuid}">
                 <div class="station-header">
                     <div class="station-logo">
                         ${favicon ? `<img src="${favicon}" alt="${station.name} logo" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">` : ''}
@@ -302,7 +305,7 @@ class RadioApp {
                             <i class="fas fa-radio"></i>
                         </div>
                     </div>
-                    <button class="favorite-btn ${isFav ? 'favorited' : ''}" data-station-uuid="${station.stationuuid}" onclick="radioApp.toggleFavorite(${JSON.stringify(station).replace(/"/g, '&quot;')})">
+                    <button class="favorite-btn ${isFav ? 'favorited' : ''}" data-station-uuid="${station.stationuuid}">
                         <i class="fas fa-heart${isFav ? '' : '-o'}"></i>
                     </button>
                 </div>
@@ -316,7 +319,7 @@ class RadioApp {
                     ${tags ? `<div class="station-tags">${tags}</div>` : ''}
                 </div>
                 
-                <button class="play-btn" onclick="radioApp.playStation(${JSON.stringify(station).replace(/"/g, '&quot;')})" title="Play ${station.name}">
+                <button class="play-btn" title="Play ${station.name}">
                     <i class="fas fa-play"></i>
                 </button>
             </div>
@@ -429,7 +432,7 @@ class RadioApp {
     }
 
     updatePlayButtonStates(activeStationUuid) {
-        document.querySelectorAll('.play-button').forEach(btn => {
+        document.querySelectorAll('.play-btn').forEach(btn => {
             const card = btn.closest('.station-card');
             const stationUuid = card.dataset.stationUuid;
             const icon = btn.querySelector('i');
@@ -528,7 +531,8 @@ class RadioApp {
     }
 
     // Favorites Management
-    toggleFavorite(station) {
+    toggleFavorite(event, station) {
+        event.stopPropagation();
         const index = this.favorites.findIndex(fav => fav.stationuuid === station.stationuuid);
         
         if (index === -1) {
@@ -567,12 +571,35 @@ class RadioApp {
         }
         
         favoritesGrid.innerHTML = this.favorites.map(station => this.createStationCard(station)).join('');
+
+        // Add event listeners to favorite buttons
+        favoritesGrid.querySelectorAll('.favorite-btn').forEach((btn, index) => {
+            btn.addEventListener('click', (e) => {
+                this.toggleFavorite(e, this.favorites[index]);
+            });
+        });
+
+        // Add click listeners to play buttons
+        favoritesGrid.querySelectorAll('.play-btn').forEach((btn, index) => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.playStation(this.favorites[index]);
+            });
+        });
+
+        // Add click listeners to station cards
+        favoritesGrid.querySelectorAll('.station-card').forEach((card, index) => {
+            card.addEventListener('click', () => {
+                this.playStation(this.favorites[index]);
+            });
+        });
     }
 
     updateFavoriteIcons() {
         document.querySelectorAll('.favorite-btn').forEach(btn => {
             const stationUuid = btn.dataset.stationUuid;
-            const station = this.currentStations?.find(s => s.stationuuid === stationUuid);
+            const station = this.currentStations?.find(s => s.stationuuid === stationUuid) || 
+                           this.favorites?.find(f => f.stationuuid === stationUuid);
             
             if (station) {
                 const isFav = this.isFavorite(station);
@@ -621,7 +648,29 @@ class RadioApp {
             }
             
             this.elements.searchResults.innerHTML = stations.map(station => this.createStationCard(station)).join('');
-            
+
+            // Add event listeners to favorite buttons
+            this.elements.searchResults.querySelectorAll('.favorite-btn').forEach((btn, index) => {
+                btn.addEventListener('click', (e) => {
+                    this.toggleFavorite(e, stations[index]);
+                });
+            });
+
+            // Add click listeners to play buttons
+            this.elements.searchResults.querySelectorAll('.play-btn').forEach((btn, index) => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.playStation(stations[index]);
+                });
+            });
+
+            // Add click listeners to station cards
+            this.elements.searchResults.querySelectorAll('.station-card').forEach((card, index) => {
+                card.addEventListener('click', () => {
+                    this.playStation(stations[index]);
+                });
+            });
+
         } catch (error) {
             console.error('Search error:', error);
             this.elements.searchResults.innerHTML = `
