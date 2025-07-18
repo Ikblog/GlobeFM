@@ -3,9 +3,7 @@
 class RadioApp {
     constructor() {
         this.apiBaseUrl = 'https://de1.api.radio-browser.info';
-        this.userAgent = 'FM Radio App/1.0';
         this.currentStation = null;
-        this.currentStations = [];
         this.audioElement = null;
         this.isPlaying = false;
         this.stations = [];
@@ -13,7 +11,8 @@ class RadioApp {
         this.languages = [];
         this.favorites = JSON.parse(localStorage.getItem('radioFavorites')) || [];
         this.currentTab = 'home';
-        
+        this.userAgent = 'FM Radio App/1.0'; // Define user agent
+
         this.init();
     }
 
@@ -22,37 +21,12 @@ class RadioApp {
         this.setupEventListeners();
         this.setupTheme();
         await this.loadInitialData();
+        this.switchTab(this.currentTab); // Ensure correct tab is shown on load
     }
 
     setupElements() {
+        // Get DOM elements
         this.elements = {
-            // Navigation
-            homeTab: document.getElementById('homeTab'),
-            favoritesTab: document.getElementById('favoritesTab'),
-            searchTab: document.getElementById('searchTab'),
-            settingsTab: document.getElementById('settingsTab'),
-            
-            // Content sections
-            homeContent: document.getElementById('homeContent'),
-            favoritesContent: document.getElementById('favoritesContent'),
-            searchContent: document.getElementById('searchContent'),
-            settingsContent: document.getElementById('settingsContent'),
-            
-            // Player elements
-            audioElement: document.getElementById('audioElement'),
-            playPauseBtn: document.getElementById('playPauseBtn'),
-            stopBtn: document.getElementById('stopBtn'),
-            volumeSlider: document.getElementById('volumeSlider'),
-            favoriteBtn: document.getElementById('favoriteBtn'),
-            playerFavoriteIcon: document.getElementById('playerFavoriteIcon'),
-            currentStationName: document.getElementById('currentStationName'),
-            currentStationCountry: document.getElementById('currentStationCountry'),
-            currentStationLogo: document.getElementById('currentStationLogo'),
-            statusIndicator: document.getElementById('statusIndicator'),
-            statusText: document.getElementById('statusText'),
-            minimizeBtn: document.getElementById('minimizeBtn'),
-            
-            // Other UI elements
             countrySelect: document.getElementById('countrySelect'),
             languageSelect: document.getElementById('languageSelect'),
             searchBtn: document.getElementById('searchBtn'),
@@ -60,13 +34,36 @@ class RadioApp {
             errorMessage: document.getElementById('errorMessage'),
             errorText: document.getElementById('errorText'),
             retryBtn: document.getElementById('retryBtn'),
-            stationCount: document.getElementById('stationCount'),
             stationsGrid: document.getElementById('stationsGrid'),
-            favoritesGrid: document.getElementById('favoritesGrid'),
+            stationCount: document.getElementById('stationCount'),
+            audioPlayer: document.getElementById('audioPlayer'),
+            audioElement: document.getElementById('audioElement'),
+            playPauseBtn: document.getElementById('playPauseBtn'),
+            stopBtn: document.getElementById('stopBtn'),
+            volumeSlider: document.getElementById('volumeSlider'),
+            currentStationName: document.getElementById('currentStationName'),
+            currentStationCountry: document.getElementById('currentStationCountry'),
+            currentStationLogo: document.getElementById('currentStationLogo'),
+            statusIndicator: document.getElementById('statusIndicator'),
+            statusText: document.getElementById('statusText'),
+            minimizeBtn: document.getElementById('minimizeBtn'),
+            themeToggle: document.getElementById('themeToggle'),
+            // Bottom navigation elements
+            homeTab: document.getElementById('homeTab'),
+            favoritesTab: document.getElementById('favoritesTab'),
+            searchTab: document.getElementById('searchTab'),
+            settingsTab: document.getElementById('settingsTab'),
+            homeContent: document.getElementById('homeContent'),
+            favoritesContent: document.getElementById('favoritesContent'),
+            searchContent: document.getElementById('searchContent'),
+            settingsContent: document.getElementById('settingsContent'),
+            // Search tab elements
             stationSearchInput: document.getElementById('stationSearchInput'),
             stationSearchBtn: document.getElementById('stationSearchBtn'),
             searchResults: document.getElementById('searchResults'),
-            themeToggle: document.getElementById('themeToggle'),
+            // Favorites elements
+            favoritesGrid: document.getElementById('favoritesGrid'),
+            // Settings elements
             themeSettingToggle: document.getElementById('themeSettingToggle'),
             autoPlayToggle: document.getElementById('autoPlayToggle'),
             defaultVolumeSlider: document.getElementById('defaultVolumeSlider'),
@@ -77,560 +74,660 @@ class RadioApp {
     }
 
     setupEventListeners() {
-        // Navigation tabs
+        // Search functionality
+        this.elements.searchBtn.addEventListener('click', () => this.searchStations());
+        this.elements.retryBtn.addEventListener('click', () => this.searchStations());
+        
+        // Audio player controls
+        this.elements.playPauseBtn.addEventListener('click', () => this.togglePlayPause());
+        this.elements.stopBtn.addEventListener('click', () => this.stopAudio());
+        this.elements.volumeSlider.addEventListener('input', (e) => this.setVolume(e.target.value));
+        this.elements.minimizeBtn.addEventListener('click', () => this.minimizePlayer());
+        
+        // Theme toggle
+        this.elements.themeToggle.addEventListener('click', () => this.toggleTheme());
+        
+        // Audio element events
+        this.audioElement.addEventListener('loadstart', () => this.updateStatus('Loading...'));
+        this.audioElement.addEventListener('canplay', () => this.updateStatus('Ready'));
+        this.audioElement.addEventListener('playing', () => this.updateStatus('Playing'));
+        this.audioElement.addEventListener('pause', () => this.updateStatus('Paused'));
+        this.audioElement.addEventListener('error', (e) => this.handleAudioError(e));
+        this.audioElement.addEventListener('ended', () => this.handleAudioEnded());
+
+        // Bottom navigation
         this.elements.homeTab.addEventListener('click', () => this.switchTab('home'));
         this.elements.favoritesTab.addEventListener('click', () => this.switchTab('favorites'));
         this.elements.searchTab.addEventListener('click', () => this.switchTab('search'));
         this.elements.settingsTab.addEventListener('click', () => this.switchTab('settings'));
 
-        // Theme toggles
-        this.elements.themeToggle.addEventListener('click', () => this.toggleTheme());
+        // Search tab functionality
+        this.elements.stationSearchInput.addEventListener('click', () => this.performStationSearch());
+        this.elements.stationSearchInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') this.performStationSearch();
+        });
+
+        // Settings functionality
         this.elements.themeSettingToggle.addEventListener('click', () => this.toggleTheme());
+        this.elements.autoPlayToggle.addEventListener('change', (e) => this.toggleAutoPlay(e.target.checked));
+        this.elements.defaultVolumeSlider.addEventListener('input', (e) => this.setDefaultVolume(e.target.value));
+        this.elements.clearFavoritesBtn.addEventListener('click', () => this.clearFavorites());
 
-        // Player controls
-        this.elements.playPauseBtn.addEventListener('click', () => this.togglePlayPause());
-        this.elements.stopBtn.addEventListener('click', () => this.stop());
-        this.elements.volumeSlider.addEventListener('input', (e) => this.setVolume(e.target.value));
-        this.elements.minimizeBtn.addEventListener('click', () => this.togglePlayer());
-
-        // Favorite button in player
-        this.elements.favoriteBtn.addEventListener('click', () => {
-            if (this.currentStation) {
-                this.toggleFavorite(null, this.currentStation);
-                this.updatePlayerFavoriteButton();
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'Space' && this.currentStation) {
+                e.preventDefault();
+                this.togglePlayPause();
             }
         });
 
-        // Search and filter controls
-        this.elements.searchBtn.addEventListener('click', () => this.searchStations());
-        this.elements.retryBtn.addEventListener('click', () => this.searchStations());
-        this.elements.stationSearchBtn.addEventListener('click', () => this.searchByNameOrGenre());
-        this.elements.stationSearchInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') this.searchByNameOrGenre();
+        // Event delegation for dynamically created elements (play buttons, favorite buttons)
+        this.elements.stationsGrid.addEventListener('click', (e) => {
+            if (e.target.closest('.play-btn')) {
+                const stationCard = e.target.closest('.station-card');
+                const stationUuid = stationCard.dataset.stationUuid;
+                const station = this.stations.find(s => s.stationuuid === stationUuid);
+                if (station) this.playStation(station);
+            }
+            if (e.target.closest('.favorite-btn')) {
+                const stationCard = e.target.closest('.station-card');
+                const stationUuid = stationCard.dataset.stationUuid;
+                const station = this.stations.find(s => s.stationuuid === stationUuid) || this.favorites.find(s => s.stationuuid === stationUuid);
+                if (station) this.toggleFavorite(station);
+            }
         });
 
-        // Settings controls
-        this.elements.clearFavoritesBtn.addEventListener('click', () => this.clearFavorites());
-        this.elements.defaultVolumeSlider.addEventListener('input', (e) => {
-            this.setVolume(e.target.value);
-            this.elements.volumeSlider.value = e.target.value;
+        this.elements.favoritesGrid.addEventListener('click', (e) => {
+            if (e.target.closest('.play-btn')) {
+                const stationCard = e.target.closest('.station-card');
+                const stationUuid = stationCard.dataset.stationUuid;
+                const station = this.favorites.find(s => s.stationuuid === stationUuid);
+                if (station) this.playStation(station);
+            }
+            if (e.target.closest('.favorite-btn')) {
+                const stationCard = e.target.closest('.station-card');
+                const stationUuid = stationCard.dataset.stationUuid;
+                const station = this.favorites.find(s => s.stationuuid === stationUuid);
+                if (station) this.toggleFavorite(station);
+            }
         });
 
-        // Audio element events
-        this.audioElement.addEventListener('play', () => this.onPlay());
-        this.audioElement.addEventListener('pause', () => this.onPause());
-        this.audioElement.addEventListener('error', () => this.onAudioError());
-        this.audioElement.addEventListener('ended', () => this.onAudioEnded());
-    }
-
-    setupTheme() {
-        const savedTheme = localStorage.getItem('radioTheme') || 'light';
-        document.documentElement.setAttribute('data-theme', savedTheme);
-        
-        if (savedTheme === 'dark') {
-            this.elements.themeToggle.innerHTML = '<i class="fas fa-sun"></i>';
-            this.elements.themeSettingToggle.innerHTML = '<i class="fas fa-sun"></i>';
-        }
+        this.elements.searchResults.addEventListener('click', (e) => {
+            if (e.target.closest('.play-btn')) {
+                const stationCard = e.target.closest('.station-card');
+                const stationUuid = stationCard.dataset.stationUuid;
+                const station = this.stations.find(s => s.stationuuid === stationUuid);
+                if (station) this.playStation(station);
+            }
+            if (e.target.closest('.favorite-btn')) {
+                const stationCard = e.target.closest('.station-card');
+                const stationUuid = stationCard.dataset.stationUuid;
+                const station = this.stations.find(s => s.stationuuid === stationUuid) || this.favorites.find(s => s.stationuuid === stationUuid);
+                if (station) this.toggleFavorite(station);
+            }
+        });
     }
 
     async loadInitialData() {
         try {
+            this.showLoading();
             await Promise.all([
-                this.fetchCountries(),
-                this.fetchLanguages()
+                this.loadCountries(),
+                this.loadLanguages()
             ]);
-            this.searchStations();
+            this.hideLoading();
+            await this.searchStations(); // Load initial stations
         } catch (error) {
-            console.error('Error loading initial data:', error);
-            this.showError('Failed to load initial data. Please try again.');
+            this.showError("Failed to load initial data. Please check your internet connection.");
+            console.error("Error loading initial data:", error);
         }
     }
-async fetchCountries() {
-    try {
-        const response = await fetch(`${this.apiBaseUrl}/json/countries`, {
-            headers: {
-                'User-Agent': this.userAgent
+
+    setupTheme() {
+        const savedTheme = localStorage.getItem("theme") || "light";
+        document.documentElement.setAttribute("data-theme", savedTheme);
+        this.updateThemeIcon(savedTheme);
+    }
+
+    toggleTheme() {
+        const currentTheme = document.documentElement.getAttribute('data-theme');
+        const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+        document.documentElement.setAttribute('data-theme', newTheme);
+        localStorage.setItem('theme', newTheme);
+        this.updateThemeIcon(newTheme);
+    }
+
+    updateThemeIcon(theme) {
+        const icon = this.elements.themeToggle.querySelector('i');
+        icon.className = theme === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
+    }
+
+    async loadCountries() {
+        try {
+            const response = await fetch(`${this.apiBaseUrl}/json/countries`);
+            if (!response.ok) throw new Error('Failed to fetch countries');
+            
+            this.countries = await response.json();
+            this.populateCountrySelect();
+        } catch (error) {
+            console.error('Error loading countries:', error);
+            throw error;
+        }
+    }
+
+    async loadLanguages() {
+        try {
+            const response = await fetch(`${this.apiBaseUrl}/json/languages`);
+            if (!response.ok) throw new Error('Failed to fetch languages');
+            
+            this.languages = await response.json();
+            this.populateLanguageSelect();
+        } catch (error) {
+            console.error('Error loading languages:', error);
+            throw error;
+        }
+    }
+
+    populateCountrySelect() {
+        const select = this.elements.countrySelect;
+        select.innerHTML = '<option value="">All Countries</option>';
+        
+        this.countries
+            .filter(country => country.stationcount > 0)
+            .sort((a, b) => a.name.localeCompare(b.name))
+            .forEach(country => {
+                const option = document.createElement('option');
+                option.value = country.name;
+                option.textContent = `${country.name} (${country.stationcount})`;
+                select.appendChild(option);
+            });
+    }
+
+    populateLanguageSelect() {
+        const select = this.elements.languageSelect;
+        select.innerHTML = '<option value="">All Languages</option>';
+        
+        this.languages
+            .filter(language => language.stationcount > 0)
+            .sort((a, b) => a.name.localeCompare(b.name))
+            .forEach(language => {
+                const option = document.createElement('option');
+                option.value = language.name;
+                option.textContent = `${language.name} (${language.stationcount})`;
+                select.appendChild(option);
+            });
+    }
+
+    async searchStations() {
+        try {
+            this.showLoading();
+            this.hideError();
+
+            const country = this.elements.countrySelect.value;
+            const language = this.elements.languageSelect.value;
+
+            let url = `${this.apiBaseUrl}/json/stations/search?limit=50&hidebroken=true&order=clickcount&reverse=true`;
+            
+            if (country) {
+                url += `&country=${encodeURIComponent(country)}`;
+            }
+            if (language) {
+                url += `&language=${encodeURIComponent(language)}`;
+            }
+
+            const response = await fetch(url, {
+                headers: {
+                    'User-Agent': this.userAgent
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            this.stations = await response.json();
+            this.displayStations();
+            this.hideLoading();
+
+        } catch (error) {
+            this.hideLoading();
+            this.showError('Failed to load radio stations. Please try again.');
+            console.error('Error searching stations:', error);
+        }
+    }
+
+    displayStations() {
+        const grid = this.elements.stationsGrid;
+        const count = this.elements.stationCount;
+
+        if (this.stations.length === 0) {
+            grid.innerHTML = `
+                <div style="grid-column: 1 / -1; text-align: center; padding: 3rem; color: var(--text-secondary);">
+                    <i class="fas fa-radio" style="font-size: 3rem; margin-bottom: 1rem; opacity: 0.5;"></i>
+                    <p>No radio stations found. Try adjusting your filters.</p>
+                </div>
+            `;
+            count.textContent = '0 stations found';
+            return;
+        }
+
+        count.textContent = `${this.stations.length} stations found`;
+        
+        grid.innerHTML = this.stations.map(station => this.createStationCard(station)).join('');
+        this.updateFavoriteIcons(); // Update favorite icons after displaying stations
+    }
+
+    createStationCard(station) {
+        const country = station.country || 'Unknown';
+        const language = station.language || '';
+        const tags = station.tags ? station.tags.split(',').slice(0, 3).join(', ') : '';
+        const favicon = station.favicon || '';
+        const isFav = this.isFavorite(station);
+        
+        return `
+            <div class="station-card" data-station-uuid="${station.stationuuid}">
+                <div class="station-header">
+                    <div class="station-logo">
+                        ${favicon ? `<img src="${favicon}" alt="${station.name} logo" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">` : ''}
+                        <div class="default-logo" ${favicon ? 'style="display: none;"' : ''}>
+                            <i class="fas fa-radio"></i>
+                        </div>
+                    </div>
+                    <button class="favorite-btn ${isFav ? 'favorited' : ''}" data-station-uuid="${station.stationuuid}">
+                        <i class="fas fa-heart"></i>
+                    </button>
+                </div>
+                
+                <div class="station-info">
+                    <h3 class="station-name">${station.name}</h3>
+                    <div class="station-details">
+                        <span class="station-country">${country}</span>
+                        ${language ? `<span class="station-language">${language}</span>` : ''}
+                    </div>
+                    ${tags ? `<div class="station-tags">${tags}</div>` : ''}
+                </div>
+                
+                <button class="play-btn" title="Play ${station.name}">
+                    <i class="fas fa-play"></i>
+                </button>
+            </div>
+        `;
+    }
+
+    async playStation(station) {
+        try {
+            if (this.currentStation && this.currentStation.stationuuid === station.stationuuid) {
+                this.togglePlayPause();
+                return;
+            }
+
+            this.currentStation = station;
+            this.updatePlayerInfo(station);
+            this.showPlayer();
+
+            // Update play button states
+            this.updatePlayButtonStates(station.stationuuid);
+
+            // Use url_resolved if available, otherwise use url
+            const streamUrl = station.url_resolved || station.url;
+            
+            if (!streamUrl) {
+                throw new Error('No stream URL available for this station');
+            }
+
+            this.audioElement.src = streamUrl;
+            this.audioElement.load();
+            
+            // Send click tracking to API
+            this.trackStationClick(station.stationuuid);
+            
+            await this.audioElement.play();
+            this.isPlaying = true;
+            this.updatePlayPauseButton();
+
+        } catch (error) {
+            console.error('Error playing station:', error);
+            this.showError(`Failed to play ${station.name}. The stream might be unavailable.`);
+            this.updateStatus('Error');
+        }
+    }
+
+    async trackStationClick(stationUuid) {
+        try {
+            await fetch(`${this.apiBaseUrl}/json/url/${stationUuid}`, {
+                method: 'GET',
+                headers: {
+                    'User-Agent': this.userAgent
+                }
+            });
+        } catch (error) {
+            console.error('Error tracking station click:', error);
+        }
+    }
+
+    togglePlayPause() {
+        if (!this.currentStation) return;
+
+        if (this.isPlaying) {
+            this.audioElement.pause();
+            this.isPlaying = false;
+        } else {
+            this.audioElement.play().catch(error => {
+                console.error('Error playing audio:', error);
+                this.showError('Failed to play audio. The stream might be unavailable.');
+            });
+            this.isPlaying = true;
+        }
+        this.updatePlayPauseButton();
+    }
+
+    stopAudio() {
+        this.audioElement.pause();
+        this.audioElement.currentTime = 0;
+        this.isPlaying = false;
+        this.updatePlayPauseButton();
+        this.updateStatus('Stopped');
+        this.updatePlayButtonStates(null);
+    }
+
+    setVolume(value) {
+        this.audioElement.volume = value / 100;
+    }
+
+    updatePlayerInfo(station) {
+        this.elements.currentStationName.textContent = station.name;
+        this.elements.currentStationCountry.textContent = station.country || 'Unknown Country';
+        
+        if (station.favicon) {
+            this.elements.currentStationLogo.src = station.favicon;
+            this.elements.currentStationLogo.style.display = 'block';
+            this.elements.currentStationLogo.nextElementSibling.style.display = 'none';
+        } else {
+            this.elements.currentStationLogo.style.display = 'none';
+            this.elements.currentStationLogo.nextElementSibling.style.display = 'flex';
+        }
+    }
+
+    updatePlayPauseButton() {
+        const icon = this.elements.playPauseBtn.querySelector('i');
+        if (this.isPlaying) {
+            icon.className = 'fas fa-pause';
+            this.elements.playPauseBtn.classList.add('active');
+        } else {
+            icon.className = 'fas fa-play';
+            this.elements.playPauseBtn.classList.remove('active');
+        }
+    }
+
+    updatePlayButtonStates(activeStationUuid) {
+        document.querySelectorAll('.play-btn').forEach(btn => {
+            const card = btn.closest('.station-card');
+            if (!card) return; // Ensure card exists
+            const stationUuid = card.dataset.stationUuid;
+            const icon = btn.querySelector('i');
+            
+            if (stationUuid === activeStationUuid && this.isPlaying) {
+                btn.classList.add('playing');
+                icon.className = 'fas fa-pause';
+            } else {
+                btn.classList.remove('playing');
+                icon.className = 'fas fa-play';
             }
         });
-        
-        if (!response.ok) {
-            throw new Error('Failed to fetch countries');
-        }
-        
-        const countries = await response.json();
-        this.countries = countries.sort((a, b) => a.name.localeCompare(b.name));
-        
-        // Populate country select dropdown
-        this.elements.countrySelect.innerHTML = '';
-        const defaultOption = document.createElement('option');
-        defaultOption.value = '';
-        defaultOption.textContent = 'All Countries';
-        this.elements.countrySelect.appendChild(defaultOption);
-        
-        this.countries.forEach(country => {
-            const option = document.createElement('option');
-            option.value = country.name;
-            option.textContent = country.name;
-            this.elements.countrySelect.appendChild(option);
-        });
-        
-        return this.countries;
-    } catch (error) {
-        console.error('Error fetching countries:', error);
-        this.showError('Failed to load countries. Please try again.');
-        throw error;
     }
-}
 
-async fetchLanguages() {
-    try {
-        const response = await fetch(`${this.apiBaseUrl}/json/languages`, {
-            headers: {
-                'User-Agent': this.userAgent
-            }
-        });
+    updateStatus(text, isPlaying = false) {
+        this.elements.statusText.textContent = text;
+        const dot = this.elements.statusIndicator.querySelector('.status-dot');
         
-        if (!response.ok) {
-            throw new Error('Failed to fetch languages');
+        if (isPlaying) {
+            dot.classList.add('playing');
+        } else {
+            dot.classList.remove('playing');
         }
-        
-        const languages = await response.json();
-        this.languages = languages.sort((a, b) => a.name.localeCompare(b.name));
-        
-        // Populate language select dropdown
-        this.elements.languageSelect.innerHTML = '';
-        const defaultOption = document.createElement('option');
-        defaultOption.value = '';
-        defaultOption.textContent = 'All Languages';
-        this.elements.languageSelect.appendChild(defaultOption);
-        
-        this.languages.forEach(language => {
-            const option = document.createElement('option');
-            option.value = language.name;
-            option.textContent = language.name;
-            this.elements.languageSelect.appendChild(option);
-        });
-        
-        return this.languages;
-    } catch (error) {
-        console.error('Error fetching languages:', error);
-        this.showError('Failed to load languages. Please try again.');
-        throw error;
     }
-}
 
-async searchStations() {
-    try {
-        this.showLoading();
-        this.hideError();
-        
-        const country = this.elements.countrySelect.value;
-        const language = this.elements.languageSelect.value;
-        
-        let url = `${this.apiBaseUrl}/json/stations`;
-        const params = [];
-        
-        if (country) params.push(`country=${encodeURIComponent(country)}`);
-        if (language) params.push(`language=${encodeURIComponent(language)}`);
-        
-        if (params.length > 0) {
-            url += `?${params.join('&')}`;
-        }
-        
-        const response = await fetch(url, {
-            headers: {
-                'User-Agent': this.userAgent
-            }
-        });
-        
-        if (!response.ok) {
-            throw new Error('Failed to fetch stations');
-        }
-        
-        let stations = await response.json();
-        
-        // Filter out stations without working URLs
-        stations = stations.filter(station => 
-            station.url_resolved && 
-            (station.url_resolved.startsWith('http') || station.url_resolved.startsWith('https'))
-        );
-        
-        // Limit to 100 stations for performance
-        stations = stations.slice(0, 100);
-        
-        this.stations = stations;
-        this.currentStations = stations;
-        this.displayStations(stations);
-        this.updateStationCount(stations.length);
-        
-        return stations;
-    } catch (error) {
-        console.error('Error searching stations:', error);
-        this.showError('Failed to load stations. Please try again.');
-        throw error;
-    } finally {
-        this.hideLoading();
+    showPlayer() {
+        this.elements.audioPlayer.classList.add('active');
     }
-}
 
-async searchByNameOrGenre() {
-    try {
-        this.showLoading();
-        this.hideError();
+    minimizePlayer() {
+        this.elements.audioPlayer.classList.remove('active');
+    }
+
+    showLoading() {
+        this.elements.loadingSpinner.style.display = 'flex';
+        this.elements.stationsGrid.style.display = 'none';
+    }
+
+    hideLoading() {
+        this.elements.loadingSpinner.style.display = 'none';
+        this.elements.stationsGrid.style.display = 'grid';
+    }
+
+    showError(message) {
+        this.elements.errorText.textContent = message;
+        this.elements.errorMessage.style.display = 'flex';
+    }
+
+    hideError() {
+        this.elements.errorMessage.style.display = 'none';
+    }
+
+    handleAudioError(event) {
+        console.error('Audio error:', event);
+        this.isPlaying = false;
+        this.updatePlayPauseButton();
+        this.updateStatus('Error');
+        this.updatePlayButtonStates(null);
         
-        const searchTerm = this.elements.stationSearchInput.value.trim();
+        const errorMessages = {
+            1: 'Audio loading was aborted',
+            2: 'Network error occurred while loading audio',
+            3: 'Audio decoding failed',
+            4: 'Audio format not supported'
+        };
         
-        if (!searchTerm) {
-            this.showError('Please enter a search term');
+        const errorCode = this.audioElement.error ? this.audioElement.error.code : 0;
+        const message = errorMessages[errorCode] || 'Unknown audio error occurred';
+        
+        this.showError(`${message}. Please try another station.`);
+    }
+
+    handleAudioEnded() {
+        this.isPlaying = false;
+        this.updatePlayPauseButton();
+        this.updateStatus('Finished');
+        this.updatePlayButtonStates(null);
+    }
+
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    // Bottom Navigation Methods
+    switchTab(tabName) {
+        // Update active tab
+        document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+        
+        document.getElementById(`${tabName}Tab`).classList.add('active');
+        document.getElementById(`${tabName}Content`).classList.add('active');
+        
+        this.currentTab = tabName;
+        
+        // Load content based on tab
+        if (tabName === 'favorites') {
+            this.loadFavorites();
+        } else if (tabName === 'settings') {
+            this.loadSettings();
+        } else if (tabName === 'home') {
+            this.displayStations(); // Re-display stations on home tab switch
+        }
+    }
+
+    // Favorites Management
+    toggleFavorite(station) {
+        const index = this.favorites.findIndex(fav => fav.stationuuid === station.stationuuid);
+        
+        if (index === -1) {
+            this.favorites.push(station);
+        } else {
+            this.favorites.splice(index, 1);
+        }
+        
+        localStorage.setItem('radioFavorites', JSON.stringify(this.favorites));
+        
+        // Update UI based on current tab
+        if (this.currentTab === 'favorites') {
+            this.loadFavorites();
+        } else if (this.currentTab === 'home' || this.currentTab === 'search') {
+            this.updateFavoriteIcons();
+        }
+    }
+
+    isFavorite(station) {
+        return this.favorites.some(fav => fav.stationuuid === station.stationuuid);
+    }
+
+    loadFavorites() {
+        const favoritesGrid = this.elements.favoritesGrid;
+        
+        if (this.favorites.length === 0) {
+            favoritesGrid.innerHTML = `
+                <div class="empty-state">
+                    <i class="fas fa-heart"></i>
+                    <h3>No favorites yet</h3>
+                    <p>Add stations to your favorites by clicking the heart icon</p>
+                </div>
+            `;
             return;
         }
         
-        const url = `${this.apiBaseUrl}/json/stations/search?name=${encodeURIComponent(searchTerm)}&limit=100`;
-        
-        const response = await fetch(url, {
-            headers: {
-                'User-Agent': this.userAgent
+        favoritesGrid.innerHTML = this.favorites.map(station => this.createStationCard(station)).join('');
+        this.updateFavoriteIcons(); // Ensure icons are correct after loading favorites
+    }
+
+    updateFavoriteIcons() {
+        document.querySelectorAll('.favorite-btn').forEach(btn => {
+            const stationUuid = btn.dataset.stationUuid;
+            // Find the station in either current stations or favorites
+            const station = this.stations.find(s => s.stationuuid === stationUuid) || 
+                            this.favorites.find(s => s.stationuuid === stationUuid);
+            
+            if (station) {
+                const isFav = this.isFavorite(station);
+                btn.classList.toggle('favorited', isFav);
             }
         });
+    }
+
+    // Search Functionality
+    async performStationSearch() {
+        const query = this.elements.stationSearchInput.value.trim();
         
-        if (!response.ok) {
-            throw new Error('Failed to search stations');
+        if (!query) {
+            this.elements.searchResults.innerHTML = `
+                <div class="empty-state">
+                    <i class="fas fa-search"></i>
+                    <h3>Search for stations</h3>
+                    <p>Enter a station name or genre to find radio stations</p>
+                </div>
+            `;
+            return;
         }
         
-        let stations = await response.json();
-        
-        // Filter out stations without working URLs
-        stations = stations.filter(station => 
-            station.url_resolved && 
-            (station.url_resolved.startsWith('http') || station.url_resolved.startsWith('https'))
-        );
-        
-        this.currentStations = stations;
-        this.displaySearchResults(stations);
-        this.updateStationCount(stations.length);
-        
-        return stations;
-    } catch (error) {
-        console.error('Error searching stations by name:', error);
-        this.showError('Failed to search stations. Please try again.');
-        throw error;
-    } finally {
-        this.hideLoading();
-    }
-}
-
-displayStations(stations) {
-    this.elements.stationsGrid.innerHTML = '';
-    
-    if (stations.length === 0) {
-        this.elements.stationsGrid.innerHTML = '<p class="no-stations">No stations found</p>';
-        return;
-    }
-    
-    stations.forEach(station => {
-        const stationCard = this.createStationCard(station);
-        this.elements.stationsGrid.appendChild(stationCard);
-    });
-}
-
-displaySearchResults(stations) {
-    this.elements.searchResults.innerHTML = '';
-    
-    if (stations.length === 0) {
-        this.elements.searchResults.innerHTML = '<p class="no-stations">No stations found</p>';
-        return;
-    }
-    
-    stations.forEach(station => {
-        const stationCard = this.createStationCard(station);
-        this.elements.searchResults.appendChild(stationCard);
-    });
-}
-
-createStationCard(station) {
-    const card = document.createElement('div');
-    card.className = 'station-card';
-    
-    const isFavorite = this.favorites.some(fav => fav.stationuuid === station.stationuuid);
-    
-    card.innerHTML = `
-        <div class="station-logo">
-            ${station.favicon ? `<img src="${station.favicon}" alt="${station.name}" onerror="this.src='default-station.png'">` : '<div class="no-logo"><i class="fas fa-radio"></i></div>'}
-        </div>
-        <div class="station-info">
-            <h3 class="station-name">${station.name}</h3>
-            <p class="station-country">${station.country || 'Unknown'}</p>
-            <p class="station-genre">${station.tags || station.genre || 'Various'}</p>
-        </div>
-        <div class="station-actions">
-            <button class="play-btn" data-id="${station.stationuuid}">
-                <i class="fas fa-play"></i>
-            </button>
-            <button class="favorite-btn" data-id="${station.stationuuid}">
-                <i class="${isFavorite ? 'fas' : 'far'} fa-heart"></i>
-            </button>
-        </div>
-    `;
-    
-    // Add event listeners to the buttons
-    const playBtn = card.querySelector('.play-btn');
-    playBtn.addEventListener('click', () => this.playStation(station));
-    
-    const favoriteBtn = card.querySelector('.favorite-btn');
-    favoriteBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        this.toggleFavorite(favoriteBtn, station);
-    });
-    
-    return card;
-}
-
-playStation(station) {
-    if (!station.url_resolved) {
-        this.showError('This station has no playable URL');
-        return;
-    }
-    
-    try {
-        this.currentStation = station;
-        this.audioElement.src = station.url_resolved;
-        this.audioElement.play()
-            .then(() => {
-                this.isPlaying = true;
-                this.updatePlayerInfo(station);
-                this.updatePlayerFavoriteButton();
-            })
-            .catch(error => {
-                console.error('Error playing station:', error);
-                this.showError('Failed to play station. Please try another one.');
+        try {
+            this.elements.searchResults.innerHTML = 
+                `<div class="loading-spinner"><div class="spinner"></div><p>Searching...</p></div>`;
+            
+            const response = await fetch(`${this.apiBaseUrl}/json/stations/search?name=${encodeURIComponent(query)}&limit=50`, {
+                headers: { 'User-Agent': this.userAgent }
             });
-    } catch (error) {
-        console.error('Error playing station:', error);
-        this.showError('Failed to play station. Please try another one.');
-    }
-}
-
-togglePlayPause() {
-    if (!this.currentStation) {
-        this.showError('No station selected');
-        return;
-    }
-    
-    if (this.isPlaying) {
-        this.audioElement.pause();
-    } else {
-        this.audioElement.play()
-            .catch(error => {
-                console.error('Error playing station:', error);
-                this.showError('Failed to play station. Please try another one.');
-            });
-    }
-}
-
-stop() {
-    this.audioElement.pause();
-    this.audioElement.src = '';
-    this.isPlaying = false;
-    this.updatePlayerState();
-}
-
-setVolume(volume) {
-    this.audioElement.volume = volume / 100;
-}
-
-updatePlayerInfo(station) {
-    this.elements.currentStationName.textContent = station.name;
-    this.elements.currentStationCountry.textContent = station.country || 'Unknown';
-    
-    if (station.favicon) {
-        this.elements.currentStationLogo.src = station.favicon;
-        this.elements.currentStationLogo.style.display = 'block';
-        this.elements.currentStationLogo.onerror = () => {
-            this.elements.currentStationLogo.style.display = 'none';
-        };
-    } else {
-        this.elements.currentStationLogo.style.display = 'none';
-    }
-    
-    this.updatePlayerState();
-}
-
-updatePlayerState() {
-    if (this.isPlaying) {
-        this.elements.playPauseBtn.innerHTML = '<i class="fas fa-pause"></i>';
-        this.elements.statusIndicator.className = 'status-indicator playing';
-        this.elements.statusText.textContent = 'Now Playing';
-    } else {
-        this.elements.playPauseBtn.innerHTML = '<i class="fas fa-play"></i>';
-        this.elements.statusIndicator.className = 'status-indicator paused';
-        this.elements.statusText.textContent = 'Paused';
-    }
-}
-
-updatePlayerFavoriteButton() {
-    if (!this.currentStation) return;
-    
-    const isFavorite = this.favorites.some(fav => fav.stationuuid === this.currentStation.stationuuid);
-    this.elements.playerFavoriteIcon.className = isFavorite ? 'fas fa-heart' : 'far fa-heart';
-}
-
-toggleFavorite(button, station) {
-    const index = this.favorites.findIndex(fav => fav.stationuuid === station.stationuuid);
-    
-    if (index === -1) {
-        // Add to favorites
-        this.favorites.push(station);
-        if (button) {
-            button.innerHTML = '<i class="fas fa-heart"></i>';
-        }
-    } else {
-        // Remove from favorites
-        this.favorites.splice(index, 1);
-        if (button) {
-            button.innerHTML = '<i class="far fa-heart"></i>';
+            
+            if (!response.ok) throw new Error('Search failed');
+            
+            const stations = await response.json();
+            
+            if (stations.length === 0) {
+                this.elements.searchResults.innerHTML = `
+                    <div class="empty-state">
+                        <i class="fas fa-search"></i>
+                        <h3>No results found</h3>
+                        <p>Try searching with different keywords</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            // Update this.stations for the search results context
+            this.stations = stations;
+            this.elements.searchResults.innerHTML = stations.map(station => this.createStationCard(station)).join('');
+            this.updateFavoriteIcons(); // Update favorite icons after displaying search results
+            
+        } catch (error) {
+            console.error('Search error:', error);
+            this.elements.searchResults.innerHTML = `
+                <div class="empty-state">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <h3>Search failed</h3>
+                    <p>Please try again later</p>
+                </div>
+            `;
         }
     }
-    
-    // Save to localStorage
-    localStorage.setItem('radioFavorites', JSON.stringify(this.favorites));
-    
-    // Update favorites display if we're on the favorites tab
-    if (this.currentTab === 'favorites') {
-        this.displayFavorites();
+
+    // Settings Management
+    loadSettings() {
+        // Load current settings
+        const autoPlay = localStorage.getItem('autoPlay') === 'true';
+        const defaultVolume = localStorage.getItem('defaultVolume') || '50';
+        
+        this.elements.autoPlayToggle.checked = autoPlay;
+        this.elements.defaultVolumeSlider.value = defaultVolume;
+        
+        // Update theme toggle icon
+        const currentTheme = document.documentElement.getAttribute('data-theme');
+        this.elements.themeSettingToggle.innerHTML = `<i class="fas fa-${currentTheme === 'dark' ? 'sun' : 'moon'}"></i>`;
     }
-}
 
-displayFavorites() {
-    this.elements.favoritesGrid.innerHTML = '';
-    
-    if (this.favorites.length === 0) {
-        this.elements.favoritesGrid.innerHTML = '<p class="no-favorites">No favorite stations yet</p>';
-        return;
+    toggleAutoPlay(enabled) {
+        localStorage.setItem('autoPlay', enabled.toString());
     }
-    
-    this.favorites.forEach(station => {
-        const stationCard = this.createStationCard(station);
-        this.elements.favoritesGrid.appendChild(stationCard);
-    });
-}
 
-clearFavorites() {
-    if (confirm('Are you sure you want to clear all favorites?')) {
-        this.favorites = [];
-        localStorage.setItem('radioFavorites', JSON.stringify(this.favorites));
-        this.displayFavorites();
-        this.updatePlayerFavoriteButton();
+    setDefaultVolume(volume) {
+        localStorage.setItem('defaultVolume', volume);
+        this.elements.volumeSlider.value = volume;
+        this.setVolume(volume);
     }
-}
 
-switchTab(tabName) {
-    this.currentTab = tabName;
-    
-    // Hide all content sections
-    this.elements.homeContent.style.display = 'none';
-    this.elements.favoritesContent.style.display = 'none';
-    this.elements.searchContent.style.display = 'none';
-    this.elements.settingsContent.style.display = 'none';
-    
-    // Remove active class from all tabs
-    this.elements.homeTab.classList.remove('active');
-    this.elements.favoritesTab.classList.remove('active');
-    this.elements.searchTab.classList.remove('active');
-    this.elements.settingsTab.classList.remove('active');
-    
-    // Show selected content and mark tab as active
-    switch (tabName) {
-        case 'home':
-            this.elements.homeContent.style.display = 'block';
-            this.elements.homeTab.classList.add('active');
-            break;
-        case 'favorites':
-            this.elements.favoritesContent.style.display = 'block';
-            this.elements.favoritesTab.classList.add('active');
-            this.displayFavorites();
-            break;
-        case 'search':
-            this.elements.searchContent.style.display = 'block';
-            this.elements.searchTab.classList.add('active');
-            break;
-        case 'settings':
-            this.elements.settingsContent.style.display = 'block';
-            this.elements.settingsTab.classList.add('active');
-            break;
+    clearFavorites() {
+        if (confirm('Are you sure you want to clear all favorites?')) {
+            this.favorites = [];
+            localStorage.removeItem('radioFavorites');
+            this.loadFavorites();
+            this.updateFavoriteIcons();
+        }
     }
-}
-
-toggleTheme() {
-    const currentTheme = document.documentElement.getAttribute('data-theme');
-    const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-    
-    document.documentElement.setAttribute('data-theme', newTheme);
-    localStorage.setItem('radioTheme', newTheme);
-    
-    if (newTheme === 'dark') {
-        this.elements.themeToggle.innerHTML = '<i class="fas fa-sun"></i>';
-        this.elements.themeSettingToggle.innerHTML = '<i class="fas fa-sun"></i>';
-    } else {
-        this.elements.themeToggle.innerHTML = '<i class="fas fa-moon"></i>';
-        this.elements.themeSettingToggle.innerHTML = '<i class="fas fa-moon"></i>';
-    }
-}
-
-togglePlayer() {
-    const player = document.querySelector('.player-container');
-    player.classList.toggle('minimized');
-    
-    if (player.classList.contains('minimized')) {
-        this.elements.minimizeBtn.innerHTML = '<i class="fas fa-expand"></i>';
-    } else {
-        this.elements.minimizeBtn.innerHTML = '<i class="fas fa-compress"></i>';
-    }
-}
-
-updateStationCount(count) {
-    this.elements.stationCount.textContent = `${count} stations found`;
-}
-
-showLoading() {
-    this.elements.loadingSpinner.style.display = 'block';
-}
-
-hideLoading() {
-    this.elements.loadingSpinner.style.display = 'none';
-}
-
-showError(message) {
-    this.elements.errorText.textContent = message;
-    this.elements.errorMessage.style.display = 'block';
-}
-
-hideError() {
-    this.elements.errorMessage.style.display = 'none';
-}
-
-onPlay() {
-    this.isPlaying = true;
-    this.updatePlayerState();
-}
-
-onPause() {
-    this.isPlaying = false;
-    this.updatePlayerState();
-}
-
-onAudioError() {
-    this.showError('Error playing station. Please try another one.');
-    this.isPlaying = false;
-    this.updatePlayerState();
-}
-
-onAudioEnded() {
-    this.isPlaying = false;
-    this.updatePlayerState();
-}
 }
 
 // Initialize the app when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
-    const radioApp = new RadioApp();
+    window.radioApp = new RadioApp();
 });
+
+// Service Worker registration for offline support (optional)
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js')
+            .then(registration => {
+                console.log('SW registered: ', registration);
+            })
+            .catch(registrationError => {
+                console.log('SW registration failed: ', registrationError);
+            });
+    });
+}
+
